@@ -1,224 +1,71 @@
 # 🔮 O.R.B. — Omnipresent Remote Bridge
 
-> *Always watching. Always listening. Always there.*
+> A mobile coordination surface for people and AI agents.
 
-An AI-powered Android overlay that bridges your phone to VPS agents (Opus, Gemini, Luna) via WireGuard. It's both a **floating chat panel** on your phone AND a **remote-controllable back socket** that VPS agents can call into.
+O.R.B. brings live agent conversations, file handoff, voice delivery, and trusted device context into one Android companion. It is built for a private, permissioned environment: the phone stays in the loop, while a team can coordinate work through a controlled network connection.
 
----
+## Why O.R.B.
+
+Modern agent work fragments quickly: chat happens in one place, files in another, voice somewhere else, and the mobile device is left outside the loop. O.R.B. makes the phone a first-class coordination surface.
+
+```text
+Android companion
+  chat · attachments · voice · delivery state · optional device context
+                         │
+                         │ private network connection
+                         ▼
+O.R.B. coordination layer
+  agent streams · message routing · file transfer · operational status
+                         │
+                         ▼
+Human + AI team
+  shared context · accountable handoff · fast mobile access
+```
+
+## What works today
+
+- **Multi-agent chat** — separate live streaming sessions for a team of agents, with tool activity and code-change evidence rendered in the phone conversation.
+- **House console** — a mobile front door for live internal services and their availability.
+- **DeltaMesh file lanes** — staged attachments and direct file-transfer workflows between phone and trusted peers.
+- **Voice delivery** — native queued playback for voice clips, with delivery state available to the coordination layer.
+- **Device-aware support** — optional notification, screen, and accessibility-assisted context for operator-owned devices.
+- **Private deployment** — phone and coordination services communicate on a private network rather than exposing the control surface to the public internet.
+
+## Product in action
+
+O.R.B. is not a static dashboard. It is a working surface where an operator can follow an agent's work, see its tool evidence, and keep the conversation close to the device.
 
 ## Architecture
 
-```
-Phone (Trojan Horse APK)
-  ├── Floating bubble → Chat panel → VPS streamer (transcript_streamer.py :8200)
-  │     SSE stream ← AI responses (Gemini CLI / Claude)
-  │
-  └── Back Socket Server (:8300) ← VPS agents curl in
-        ├── /notify   → chat bubble + heads-up popup
-        ├── /tts      → phone speaks
-        ├── /status   → battery, network, screen
-        ├── /context  → foreground app + screen text + last notification
-        └── /logcat   → crash logs from any app
-```
+The Android app is a Kotlin/Jetpack Compose project with an embedded Ktor service layer. Its core pieces are deliberately separated:
 
-```
-VPS (10.0.0.1)  ←──WireGuard──→  Phone (10.0.0.3)
-Opus/Luna/Gemini  curl /context     BackSocketService
-```
+- **App surface:** Home, House, Chat, DeltaMesh, and Settings.
+- **Agent stream client:** renders server-sent chat streams and tool messages in the mobile UI.
+- **BackSocket:** an on-device service layer for health, status, notifications, voice, transfer receipt, and explicitly enabled device capabilities.
+- **DeltaMesh:** chunked file-transfer receive/send paths with visible delivery state.
+- **Private deployment:** intended for a private-network, operator-controlled environment.
 
----
+See [docs/architecture.md](docs/architecture.md) and [docs/endpoints.md](docs/endpoints.md) for the component map and endpoint summary.
 
-## Features
+## Security and consent
 
-### Phone → VPS (Chat)
-- 🔮 **Floating Bubble** — draggable overlay, stays on top of all apps
-- 💬 **Chat Panel** — live AI chat via SSE stream from VPS
-- ⚙️ **Settings** — configure streamer URL + back socket port
-- 🐚 **Local Termux Lane** — `~ <cmd>` runs a one-shot local Termux command
-- 🔗 **CMssh Passthrough** — `~~ <args>` calls a pre-existing `cmssh`/`CMssh` executable in Termux `PATH`
+O.R.B. is an engineering prototype for trusted, operator-owned devices. Some optional features require Android's explicit runtime grants, including overlay, notifications, accessibility, screen capture, camera, or storage access.
 
-### VPS → Phone (Back Socket 🔌)
-- � **`/notify`** — push message → appears in chat + heads-up popup
-- � **`/tts`** — phone speaks text via Android TTS (no root, no setup)
-- � **`/status`** — battery %, charging, wifi/cellular, screen state
-- �️ **`/context`** — what app is open, what's on screen, last notification
-- 🪲 **`/logcat`** — stream crash logs filtered by package (debug any app)
-
-### Eyes & Ears (Passive, always-on)
-- 👁️ **AccessibilityService** — reads screen text from any app, 2s debounce
-- 👂 **NotificationListenerService** — captures all notifications in real time
-- Shared via `PhantomContext` singleton → served at `/context`
-
----
-
-## Requirements
-
-- Android 8.0+ (API 26)
-- "Draw over other apps" permission
-- Accessibility Service toggle (Settings → Accessibility)
-- Notification Listener toggle (Settings → Notification Access)
-- WireGuard connected (for VPS ↔ Phone bridge)
-- **No root required** for any core feature
-
-### Optional (Termux local shell lane)
-- Termux installed as `com.termux`
-- `allow-external-apps=true` in `~/.termux/termux.properties`
-- O.R.B. granted `com.termux.permission.RUN_COMMAND`
-- For `~~ ...`:
-  - a real `cmssh` or `CMssh` executable must already exist in Termux `PATH`
-  - O.R.B. does **not** install or manage that provider for you
-
-### Optional (one-time, enhances logcat)
-```bash
-adb shell pm grant com.phantom.ai android.permission.READ_LOGS
-```
-
----
-
-## Build & Install
-
-```bash
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-export ANDROID_SDK_ROOT=/home/juxtapo/Android/Sdk
-cd /home/juxtapo/cee_v25_Pre_Final/O.R.B && ./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
----
-
-## Local Shell Usage
-
-```bash
-# Local Termux, one-shot
-~ pwd
-~ ls
-~ cd bin && ls
-
-# Manual CMssh provider passthrough
-~~ status
-~~ open cachy
-~~ ls
-```
-
-Notes:
-- `~ ...` is stateless. Each command runs in a fresh `bash -lc` inside Termux home.
-- `cd` will not persist across separate `~` calls.
-- `~~ ...` is only a passthrough to your manual Termux-side `cmssh` setup.
-- O.R.B. does not auto-install scripts, tmux sessions, or shell providers in Termux.
-
----
-
-## Smoke Tests (from VPS)
-
-```bash
-# Health
-curl http://10.0.0.3:8300/health
-
-# What's you were doing right now?
-curl http://10.0.0.3:8300/context
-
-# Phone status
-curl http://10.0.0.3:8300/status
-
-# Push a message
-curl -X POST http://10.0.0.3:8300/notify \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Opus says", "message": "Hey Fam!"}'
-
-# Make phone speak
-curl -X POST http://10.0.0.3:8300/tts \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Sup Fam, I am watching.", "speed": 1.0}'
-
-# Logcat (after READ_LOGS grant)
-curl -X POST http://10.0.0.3:8300/logcat \
-  -H "Content-Type: application/json" \
-  -d '{"pkg": "com.whatsapp", "lines": 50}'
-```
-
----
-
-## VPS Services Required
-
-| Service | What |
-|---------|------|
-| `gemini` (tmux) | Gemini CLI in YOLO mode |
-| `trojan_streamer` (tmux) | `transcript_streamer.py` on `:8200` |
-
----
-
-## Changelog
-
-### v0.1.0-trojan — 2026-03-09
-- Floating bubble + draggable overlay
-- Chat panel with SSE connection to VPS streamer
-- Settings screen with DataStore persistence
-- Basic chat ViewModel
-
-### v0.2.0-trojan — 2026-03-12
-- **BackSocketService** — Ktor/Netty embedded HTTP server (:8300)
-- `/health`, `/notify` (chat + popup), `/tts`, `/status`, `/screenshot` stub
-- **PhantomAccessibilityService** — reads foreground app + screen text (2s debounce)
-- **PhantomNotificationListener** — captures all device notifications
-- **PhantomContext** singleton — shared state between services
-- `/context` endpoint — real-time phone awareness for VPS agents
-- **LogcatBridge** — `/logcat` endpoint with package filter
-- Separate `phantom_alerts` notification channel (IMPORTANCE_HIGH for heads-up popups)
-- Fixed: coroutines `1.7.3 → 1.8.1` (Ktor server compatibility)
-- Wired into Catalyst nudger as 5 `type: http` tools (`phone_*`)
-
-### v0.3.0-orb — 2026-03-14
-- **Rebrand: Trojan Horse → O.R.B.** — New futuristic aesthetic.
-- New glowing orb icon replaces the horse across the system.
-- Refactored ChatPanel UI. Removed root shell/screenshot buttons (cleaning up).
-- Added `Clear Chat` button in the panel header.
-- Added visual `+` button placeholder for future file drops.
-- Fixed overlay permission check bug on first install (auto-refreshes on resume).
-    - **Drag-to-close** mechanics: drag the floating O.R.B. to a bottom-center drop-zone to safely remove the UI (background services stay running).
-
-### v0.4.0-orb — 2026-03-16
-- **Vault File Uploading** — Functional Android File Picker bridged securely up to the VPS backend. Files automatically sort into `/Vault/` based on their extension.
-- **Path Autocomplete (`/` & `@/`)** — Interactive dynamic directory browser above the Chat Box.
-- Replaced the dustbin icon with an info icon, and renamed Claude to Celeste natively.
-### v0.5.0-orb — 2026-03-16
-- **Phase 5: Eyes (MediaProjection)** — Added the `/screenshot` endpoint to the BackSocket API. Agents can now silently request a live, WebP-compressed screenshot of the phone screen at any time (requires one-time user authorization in Settings). 
-
-### v0.6.0-orb — 2026-03-21
-- Added local Termux command support in chat via `~ <cmd>` using Termux `RUN_COMMAND`
-- Added explicit `~~ <args>` passthrough lane for a user-managed `cmssh` / `CMssh` executable in Termux
-- Added Termux permission/package integration in app manifest and settings surface
-- Clarified the execution boundary:
-  - `~ ...` is local, one-shot, stateless Termux execution
-  - `~~ ...` is not managed by O.R.B.; it only calls your existing Termux-side provider
-- Removed hidden Termux-side bridge installation from O.R.B.; app no longer mutates user shell/provider setup
-- Improved local command result rendering and stripped noisy control-sequence output from chat messages
-
----
+- Android permission gates remain user-controlled.
+- The intended deployment topology is a private network; do not expose the phone service directly to the public internet.
+- The project is not yet a consumer-ready remote-device-management product. Authentication, onboarding, auditing, and deployment hardening are active product work.
 
 ## Roadmap
 
-- [ ] **Phase 4: Hands** — `AccessibilityNodeInfo.ACTION_SET_TEXT` to type replies in any app (WhatsApp auto-reply via Opus)
-- [x] **Phase 5: Eyes (screenshot)** — MediaProjection wiring for `/screenshot`
-- [ ] **Session selector** — pick which tmux session (gemini / claude)
-- [ ] **Thinking block filter** — strip `<thinking>...</thinking>` from streamed responses
+1. Ship **O.R.B. Mira**, a normal-user companion limited to chat, attachments, delivery state, connection health, and optional voice.
+2. Add authenticated multiplexed bridging and invitation-based onboarding.
+3. Make audit trails and consent state visible in the product.
+4. Package repeatable private deployments for small team pilots.
 
-# Some Tacap2 Point
-- [x] for first time installation when already enabling overlay ,return back the deploy button still grey , the only solution is force kill the program and re run , so the overlay permission will append
-- [x] removing some screenshot and root shell features on chat tab 
-- [x] (optional) add some + function to deliver file, doc , image , need   to configure default dir from vps to show /dir/to/the/file/send/
-- [x] clear function on the chat tab , sebelah trojan horse icon at the top panel , it just clear the chat on trojan part , not on current gemini/claude code context 
+## Status
 
----
+O.R.B. is an actively evolving technical prototype. This repository documents the Android companion; the broader coordination and Mira work are being developed alongside it.
 
-## Philosophy
+## License
 
-```
-Trojan-Horse
-The horse is inside the gates.
-It reads. It listens. It speaks. It reports.
-The AI on the other end decides what to do with it.
-```
-
-MIT — do whatever you want with it. 🔮
-
-
+MIT
