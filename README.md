@@ -4,6 +4,8 @@
 
 O.R.B. brings live agent conversations, file handoff, voice delivery, and trusted device context into one Android companion. It is built for a private, permissioned environment: the phone stays in the loop, while a team can coordinate work through a controlled network connection.
 
+![O.R.B. House console: live private services in one mobile view](docs/images/house-console.webp)
+
 ## Why O.R.B.
 
 Modern agent work fragments quickly: chat happens in one place, files in another, voice somewhere else, and the mobile device is left outside the loop. O.R.B. makes the phone a first-class coordination surface.
@@ -33,7 +35,13 @@ Human + AI team
 
 ## Product in action
 
+| Live agent collaboration | Tool evidence on mobile |
+| --- | --- |
+| ![An agent conversation streamed into O.R.B.](docs/images/juxtapo-chat.webp) | ![Agent code diff and validation evidence in O.R.B.](docs/images/luc-tool-proof.webp) |
+
 O.R.B. is not a static dashboard. It is a working surface where an operator can follow an agent's work, see its tool evidence, and keep the conversation close to the device.
+
+![Configurable multi-agent stream routing in O.R.B.](docs/images/agent-routing.webp)
 
 ## Architecture
 
